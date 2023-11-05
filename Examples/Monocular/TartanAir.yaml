@@ -1,0 +1,66 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# System config
+#--------------------------------------------------------------------------------------------
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters. 
+#--------------------------------------------------------------------------------------------
+File.version: "1.0"
+
+Camera.type: "PinHole"
+
+# Camera calibration and distortion parameters (OpenCV) 
+Camera1.fx: 320.000
+Camera1.fy: 320.000
+Camera1.cx: 320.000
+Camera1.cy: 240.000
+
+Camera1.k1: 0.000
+Camera1.k2: 0.000
+Camera1.p1: 0.000
+Camera1.p2: 0.000
+
+Camera.width: 640
+Camera.height: 480
+
+Camera.newWidth: 640
+Camera.newHeight: 480
+
+# Camera frames per second 
+Camera.fps: 30
+
+# Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
+Camera.RGB: 1
+
+#--------------------------------------------------------------------------------------------
+# MOV Parameters
+#---------------------------------------------------------------------------------------------
+MOVExtractor.threshold: 25
+MOVExtractor.coverageThreshold: 0.20
+MOVExtractor.relocalizationDistance: 0.25
+
+#--------------------------------------------------------------------------------------------
+# Optimizer Parameters
+#--------------------------------------------------------------------------------------------
+Optimizer.iterationCount: 50
+Optimizer.reprojectionError: 5.0
+Optimizer.reprojectionErrorLost: 8.0
+Optimizer.confidence: 0.95
+Optimizer.algorithm: 38
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters
+#---------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0
+

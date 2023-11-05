@@ -1,0 +1,131 @@
+--- libavcodec/h264dec.c
++++ libavcodec/h264dec.c
+@@ -918,7 +918,7 @@ static int finalize_frame(H264Context *h, AVFrame *dst, H264Picture *out, int *g
+                                  out->qscale_table,
+                                  out->motion_val,
+                                  NULL,
+-                                 out->mb_width, out->mb_height, out->mb_stride, 1);
++                                 out->mb_width, out->mb_height, out->mb_stride, 1, out->ref_index);
+         }
+     }
+ 
+--- libavcodec/mpegutils.c
++++ libavcodec/mpegutils.c
+@@ -32,7 +32,7 @@
+ static int add_mb(AVMotionVector *mb, uint32_t mb_type,
+                   int dst_x, int dst_y,
+                   int motion_x, int motion_y, int motion_scale,
+-                  int direction)
++                  int direction, int ref)
+ {
+     mb->w = IS_8X8(mb_type) || IS_8X16(mb_type) ? 8 : 16;
+     mb->h = IS_8X8(mb_type) || IS_16X8(mb_type) ? 8 : 16;
+@@ -45,6 +45,7 @@ static int add_mb(AVMotionVector *mb, uint32_t mb_type,
+     mb->src_y = dst_y + motion_y / motion_scale;
+     mb->source = direction ? 1 : -1;
+     mb->flags = 0; // XXX: does mb_type contain extra information that could be exported here?
++    mb->ref = ref;
+     return 1;
+ }
+ 
+@@ -103,7 +104,7 @@ void ff_draw_horiz_band(AVCodecContext *avctx,
+ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_table,
+                          uint32_t *mbtype_table, int8_t *qscale_table, int16_t (*motion_val[2])[2],
+                          int *low_delay,
+-                         int mb_width, int mb_height, int mb_stride, int quarter_sample)
++                         int mb_width, int mb_height, int mb_stride, int quarter_sample, int8_t *ref_index[2])
+ {
+     if ((avctx->export_side_data & AV_CODEC_EXPORT_DATA_MVS) && mbtype_table && motion_val[0]) {
+         const int shift = 1 + quarter_sample;
+@@ -121,7 +122,8 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
+ 
+         for (mb_y = 0; mb_y < mb_height; mb_y++) {
+             for (mb_x = 0; mb_x < mb_width; mb_x++) {
+-                int i, direction, mb_type = mbtype_table[mb_x + mb_y * mb_stride];
++		int mb_xy = mb_x + mb_y * mb_stride;
++                int i, direction, mb_type = mbtype_table[mb_xy];
+                 for (direction = 0; direction < 2; direction++) {
+                     if (!USES_LIST(mb_type, direction))
+                         continue;
+@@ -133,7 +135,9 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
+                                       (mb_y * 2 + (i >> 1)) * mv_stride) << (mv_sample_log2 - 1);
+                             int mx = motion_val[direction][xy][0];
+                             int my = motion_val[direction][xy][1];
+-                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction);
++                            const int8_t * ref0 = &ref_index[direction][4 * mb_xy];
++                            int ref = ref0[i];
++                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction, ref);
+                         }
+                     } else if (IS_16X8(mb_type)) {
+                         for (i = 0; i < 2; i++) {
+@@ -142,11 +146,12 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
+                             int xy = (mb_x * 2 + (mb_y * 2 + i) * mv_stride) << (mv_sample_log2 - 1);
+                             int mx = motion_val[direction][xy][0];
+                             int my = motion_val[direction][xy][1];
+-
++                            const int8_t * ref0 = &ref_index[direction][4 * mb_xy];
++                            int ref = ref0[i * 2];
+                             if (IS_INTERLACED(mb_type))
+                                 my *= 2;
+ 
+-                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction);
++                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction, ref);
+                         }
+                     } else if (IS_8X16(mb_type)) {
+                         for (i = 0; i < 2; i++) {
+@@ -155,11 +160,13 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
+                             int xy = (mb_x * 2 + i + mb_y * 2 * mv_stride) << (mv_sample_log2 - 1);
+                             int mx = motion_val[direction][xy][0];
+                             int my = motion_val[direction][xy][1];
++                            const int8_t * ref0 = &ref_index[direction][4 * mb_xy];
++                            int ref = ref0[i];
+ 
+                             if (IS_INTERLACED(mb_type))
+                                 my *= 2;
+ 
+-                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction);
++                            mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction, ref);
+                         }
+                     } else {
+                           int sx = mb_x * 16 + 8;
+@@ -167,7 +174,8 @@ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_
+                           int xy = (mb_x + mb_y * mv_stride) << mv_sample_log2;
+                           int mx = motion_val[direction][xy][0];
+                           int my = motion_val[direction][xy][1];
+-                          mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction);
++                          int ref = ref_index[direction][4 * mb_xy];
++                          mbcount += add_mb(mvs + mbcount, mb_type, sx, sy, mx, my, scale, direction, ref);
+                     }
+                 }
+             }
+--- libavcodec/mpegutils.h
++++ libavcodec/mpegutils.h
+@@ -144,6 +144,6 @@ void ff_draw_horiz_band(AVCodecContext *avctx, AVFrame *cur, AVFrame *last,
+ void ff_print_debug_info2(AVCodecContext *avctx, AVFrame *pict, uint8_t *mbskip_table,
+                          uint32_t *mbtype_table, int8_t *qscale_table, int16_t (*motion_val[2])[2],
+                          int *low_delay,
+-                         int mb_width, int mb_height, int mb_stride, int quarter_sample);
++                         int mb_width, int mb_height, int mb_stride, int quarter_sample, int8_t *ref_index[2]);
+ 
+ #endif /* AVCODEC_MPEGUTILS_H */
+--- libavcodec/mpegvideo.c
++++ libavcodec/mpegvideo.c
+@@ -1414,7 +1414,7 @@ void ff_print_debug_info(MpegEncContext *s, Picture *p, AVFrame *pict)
+ {
+     ff_print_debug_info2(s->avctx, pict, s->mbskip_table, p->mb_type,
+                          p->qscale_table, p->motion_val, &s->low_delay,
+-                         s->mb_width, s->mb_height, s->mb_stride, s->quarter_sample);
++                         s->mb_width, s->mb_height, s->mb_stride, s->quarter_sample, p->ref_index);
+ }
+ 
+ int ff_mpv_export_qp_table(MpegEncContext *s, AVFrame *f, Picture *p, int qp_type)
+--- libavutil/motion_vector.h
++++ libavutil/motion_vector.h
+@@ -52,6 +52,7 @@ typedef struct AVMotionVector {
+      */
+     int32_t motion_x, motion_y;
+     uint16_t motion_scale;
++    int32_t ref;
+ } AVMotionVector;
+ 
+ #endif /* AVUTIL_MOTION_VECTOR_H */

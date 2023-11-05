@@ -1,0 +1,189 @@
+/**
+ * This file is part of MOV-SLAM
+ *
+ * Copyright (C) 2022
+ *
+ * MOV-SLAM is free software: you can redistribute it and/or modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * MOV-SLAM is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+ * the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with MOV-SLAM.
+ * If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef LOCALMAPPING_H
+#define LOCALMAPPING_H
+
+#include "KeyFrame.h"
+#include "Atlas.h"
+#include "Tracking.h"
+#include "Settings.h"
+
+#include <mutex>
+
+namespace MOV_SLAM
+{
+
+    class System;
+    class Tracking;
+    class Atlas;
+
+    class LocalMapping
+    {
+    public:
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        LocalMapping(System *pSys, Atlas *pAtlas, const float bMonocular, bool bInertial, const string &_strSeqName = std::string());
+
+        void SetTracker(Tracking *pTracker);
+
+        // Main function
+        void Run();
+
+        void InsertKeyFrame(KeyFrame *pKF);
+        void EmptyQueue();
+
+        // Thread Synch
+        void RequestStop();
+        void RequestReset();
+        void RequestResetActiveMap(Map *pMap);
+        bool Stop();
+        void Release();
+        bool isStopped();
+        bool stopRequested();
+        bool AcceptKeyFrames();
+        void SetAcceptKeyFrames(bool flag);
+        bool SetNotStop(bool flag);
+
+        void InterruptBA();
+
+        void RequestFinish();
+        bool isFinished();
+
+        int KeyframesInQueue()
+        {
+            unique_lock<std::mutex> lock(mMutexNewKFs);
+            return mlNewKeyFrames.size();
+        }
+
+        bool IsInitializing();
+        double GetCurrKFTime();
+        KeyFrame *GetCurrKF();
+
+        std::mutex mMutexImuInit;
+
+        Eigen::MatrixXd mcovInertial;
+        Eigen::Matrix3d mRwg;
+        Eigen::Vector3d mbg;
+        Eigen::Vector3d mba;
+        double mScale;
+        double mInitTime;
+        double mCostTime;
+
+        unsigned int mInitSect;
+        unsigned int mIdxInit;
+        unsigned int mnKFs;
+        double mFirstTs;
+        int mnMatchesInliers;
+
+        // For debugging (erase in normal mode)
+        int mInitFr;
+        int mIdxIteration;
+        string strSequence;
+
+        bool mbNotBA1;
+        bool mbNotBA2;
+        bool mbBadImu;
+
+        bool mbWriteStats;
+
+        // not consider far points (clouds)
+        bool mbFarPoints;
+        float mThFarPoints;
+
+#ifdef REGISTER_TIMES
+        vector<double> vdKFInsert_ms;
+        vector<double> vdMPCulling_ms;
+        vector<double> vdMPCreation_ms;
+        vector<double> vdLBA_ms;
+        vector<double> vdKFCulling_ms;
+        vector<double> vdLMTotal_ms;
+
+        vector<double> vdLBASync_ms;
+        vector<double> vdKFCullingSync_ms;
+        vector<int> vnLBA_edges;
+        vector<int> vnLBA_KFopt;
+        vector<int> vnLBA_KFfixed;
+        vector<int> vnLBA_MPs;
+        int nLBA_exec;
+        int nLBA_abort;
+#endif
+    protected:
+        bool CheckNewKeyFrames();
+        void ProcessNewKeyFrame();
+        void CreateNewMapPoints();
+
+        void MapPointCulling();
+        void SearchInNeighbors();
+        void KeyFrameCulling();
+
+        System *mpSystem;
+
+        bool mbMonocular;
+        bool mbInertial;
+
+        void ResetIfRequested();
+        bool mbResetRequested;
+        bool mbResetRequestedActiveMap;
+        Map *mpMapToReset;
+        std::mutex mMutexReset;
+
+        bool CheckFinish();
+        void SetFinish();
+        bool mbFinishRequested;
+        bool mbFinished;
+        std::mutex mMutexFinish;
+
+        Atlas *mpAtlas;
+
+        Tracking *mpTracker;
+
+        std::list<KeyFrame *> mlNewKeyFrames;
+
+        KeyFrame *mpCurrentKeyFrame;
+
+        std::list<MapPoint *> mlpRecentAddedMapPoints;
+
+        std::mutex mMutexNewKFs;
+
+        bool mbAbortBA;
+
+        bool mbStopped;
+        bool mbStopRequested;
+        bool mbNotStop;
+        std::mutex mMutexStop;
+
+        bool mbAcceptKeyFrames;
+        std::mutex mMutexAccept;
+        void ScaleRefinement();
+
+        bool bInitializing;
+
+        Eigen::MatrixXd infoInertial;
+        int mNumLM;
+        int mNumKFCulling;
+
+        float mTinit;
+
+        int countRefinement;
+
+        // DEBUG
+        ofstream f_lm;
+    };
+
+} // namespace MOV_SLAM
+
+#endif // LOCALMAPPING_H
